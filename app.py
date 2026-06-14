@@ -9,7 +9,7 @@ CORS(app)
 
 # Safe model path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(BASE_DIR, "../Model/loan_model.pkl")
+model_path = os.path.join(BASE_DIR, "..loan_model.pkl")
 
 model = joblib.load(model_path)
 

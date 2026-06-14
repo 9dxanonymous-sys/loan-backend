@@ -1,47 +1,43 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
-import joblib
 import pandas as pd
-import os
+import joblib
 
 app = Flask(__name__)
-CORS(app)
 
 # Load model
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(BASE_DIR, "loan_model.pkl")
+model = joblib.load("../Model/loan_model.pkl")
 
-model = joblib.load(model_path)
+# Load training columns (VERY IMPORTANT FIX)
+df_template = pd.read_csv("../Dataset/train.csv")
+df_template = df_template.dropna()
+df_template["Loan_Status"] = df_template["Loan_Status"].map({"Y": 1, "N": 0})
+df_template = pd.get_dummies(df_template.drop("Loan_Status", axis=1))
+model_columns = df_template.columns
 
-@app.route("/")
-def home():
-    return "Loan Prediction API is Running"
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    try:
-        data = request.json
+    data = request.get_json()
 
-        df = pd.DataFrame([data])
+    # 1. Convert input to dataframe
+    input_df = pd.DataFrame([data])
 
-        # Convert categorical variables
-        df = pd.get_dummies(df)
+    # 2. One-hot encode like training
+    input_df = pd.get_dummies(input_df)
 
-        # Match model training columns
-        model_features = model.feature_names_in_
-        df = df.reindex(columns=model_features, fill_value=0)
+    # 3. Align columns with training model
+    input_df = input_df.reindex(columns=model_columns, fill_value=0)
 
-        prediction = model.predict(df)[0]
+    # 4. Prediction
+    prediction = model.predict(input_df)[0]
+    probability = model.predict_proba(input_df)[0][1]
 
-        return jsonify({
-            "Loan_Status": str(prediction)
-        })
+    # 5. Response
+    return jsonify({
+        "loan_status": int(prediction),
+        "probability": round(float(probability) * 100, 2)
+    })
 
-    except Exception as e:
-        return jsonify({
-            "error": str(e)
-        }), 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(debug=True)

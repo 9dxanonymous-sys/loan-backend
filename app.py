@@ -7,9 +7,9 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Safe model path
+# Load model
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(BASE_DIR, "..loan_model.pkl")
+model_path = os.path.join(BASE_DIR, "loan_model.pkl")
 
 model = joblib.load(model_path)
 
@@ -19,20 +19,29 @@ def home():
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    data = request.json
+    try:
+        data = request.json
 
-    df = pd.DataFrame([data])
+        df = pd.DataFrame([data])
 
-    # convert same as training
-    df = pd.get_dummies(df)
+        # Convert categorical variables
+        df = pd.get_dummies(df)
 
-    # align columns with training model
-    model_features = model.feature_names_in_
-    df = df.reindex(columns=model_features, fill_value=0)
+        # Match model training columns
+        model_features = model.feature_names_in_
+        df = df.reindex(columns=model_features, fill_value=0)
 
-    prediction = model.predict(df)[0]
+        prediction = model.predict(df)[0]
 
-    return jsonify({"Loan_Status": str(prediction)})
+        return jsonify({
+            "Loan_Status": str(prediction)
+        })
+
+    except Exception as e:
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)

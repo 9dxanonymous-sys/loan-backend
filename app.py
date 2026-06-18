@@ -13,79 +13,57 @@ except Exception as e:
     print(f"❌ Error loading model: {e}")
     model = None
 
-
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify(
-        {
-            "status": "online",
-            "message": "Smart Loan Prediction API is running successfully!",
-            "model_loaded": model is not None,
-        }
-    )
-
+    return jsonify({
+        "status": "online",
+        "message": "Smart Loan Prediction API is running successfully!",
+        "model_loaded": model is not None
+    })
 
 @app.route("/predict", methods=["POST"])
 def predict():
     if model is None:
-        return (
-            jsonify({"status": "error", "message": "Model file not found on server!"}),
-            500,
-        )
+        return jsonify({"status": "error", "message": "Model file not found on server!"}), 500
 
     try:
         data = request.get_json()
-
         if not data:
-            return (
-                jsonify({"status": "error", "message": "No input data provided"}),
-                400,
-            )
+            return jsonify({"status": "error", "message": "No input data provided"}), 400
 
         gender_raw = data.get("Gender")
         income_raw = data.get("ApplicantIncome")
         amount_raw = data.get("LoanAmount")
         credit_raw = data.get("Credit_History")
 
-        if (
-            gender_raw is None
-            or income_raw is None
-            or amount_raw is None
-            or credit_raw is None
-        ):
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Missing required fields in request parameters.",
-                    }
-                ),
-                400,
-            )
+        if gender_raw is None or income_raw is None or amount_raw is None or credit_raw is None:
+            return jsonify({"status": "error", "message": "Missing required fields"}), 400
 
+        # Numeric Conversion
         gender = 1 if gender_raw == "Male" else 0
         applicant_income = float(income_raw)
         loan_amount = float(amount_raw)
         credit_history = int(credit_raw)
 
         input_features = [[gender, applicant_income, loan_amount, credit_history]]
+        
+        # Get raw binary prediction (0 or 1)
         prediction = model.predict(input_features)[0]
-
         is_approved = True if int(prediction) == 1 else False
-        result = "Approved" if is_approved else "Rejected"
+        
+        # Calculate true mathematical probability percentage from Random Forest
+        probabilities = model.predict_proba(input_features)[0]
+        approval_probability = float(probabilities[1]) * 100 
 
-        return jsonify(
-            {
-                "status": "success",
-                "loan_status": is_approved,
-                "status_text": result,
-                "probability": 85 if is_approved else 35,
-            }
-        )
+        return jsonify({
+            "status": "success",
+            "loan_status": is_approved,
+            "status_text": "Approved" if is_approved else "Rejected",
+            "probability": round(approval_probability)
+        })
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

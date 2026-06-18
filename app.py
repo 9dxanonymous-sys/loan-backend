@@ -1,60 +1,50 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import pandas as pd
+from flask import Flask, jsonify, request
+from flask_cors import CORS  # Agar frontend alag port par chal raha ho
 import joblib
-import os
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Frontend-Backend connection errors se bachne ke liye
 
-# Load model
-model = joblib.load("Model/loan_model.pkl")
-
-# Load training columns
-df_template = pd.read_csv("Dataset/train.csv")
-df_template = df_template.dropna()
-
-df_template["Loan_Status"] = df_template["Loan_Status"].map({
-    "Y": 1,
-    "N": 0
-})
-
-df_template = pd.get_dummies(
-    df_template.drop("Loan_Status", axis=1)
-)
-
-model_columns = df_template.columns
-
-
-@app.route("/")
-def home():
-    return "Loan Prediction API Running"
-
+# 1. Model ko load karein (jo abhi train kiya hai)
+try:
+    model = joblib.load("model.pkl")
+    print("✅ Model successfully backend mein load ho gaya!")
+except Exception as e:
+    print(f"❌ Model load karne mein error: {e}")
 
 @app.route("/predict", methods=["POST"])
 def predict():
-
-    data = request.get_json()
-
-    input_df = pd.DataFrame([data])
-
-    input_df = pd.get_dummies(input_df)
-
-    input_df = input_df.reindex(
-        columns=model_columns,
-        fill_value=0
-    )
-
-    prediction = model.predict(input_df)[0]
-
-    probability = model.predict_proba(input_df)[0][1]
-
-    return jsonify({
-        "loan_status": int(prediction),
-        "probability": round(float(probability) * 100, 2)
-    })
-
+    try:
+        # 2. Frontend se JSON data receive karein
+        data = request.get_json()
+        
+        # 3. Data Extraction & Mapping (Frontend to Model Alignment)
+        # Frontend string 'Male'/'Female' bhejta hai, model ko 1 ya 0 chahiye
+        gender = 1 if data.get("gender") == "Male" else 0
+        applicant_income = float(data.get("applicant_income"))
+        loan_amount = float(data.get("loan_amount"))
+        credit_history = int(data.get("credit_history")) # 1 (Good) ya 0 (Bad)
+        
+        # 4. Model ke liye input array banana
+        input_features = [[gender, applicant_income, loan_amount, credit_history]]
+        
+        # 5. Prediction karna
+        prediction = model.predict(input_features)[0]
+        
+        # 6. Output mapping (1 = Approved, 0 = Rejected)
+        result = "Approved" if prediction == 1 else "Rejected"
+        
+        return jsonify({
+            "status": "success",
+            "loan_status": result
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 400
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    # Project ko run karne ke liye
+    app.run(debug=True, port=5000)
